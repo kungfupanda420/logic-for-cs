@@ -62,13 +62,13 @@ def Interpolation(M, max_k):
         s.push()
         s.add(F(states[k]))
         if s.check() == sat:
-            print(f"Interpolation (k={k-1}): Reaches 11")
+            print(f"interpolation (k={k-1}): Reaches 11")
             return
         s.pop()
         new_approx = [Or(current_approx[j], states[k][j]) for j in range(2)]
         if current_approx == new_approx:
             reached_fixed_point = True
-            print("Interpolation: Reached fixed point - system is safe")
+            print("interpolation:reached")
             break
         current_approx = new_approx
     if not reached_fixed_point:
@@ -77,13 +77,13 @@ def Interpolation(M, max_k):
 def main():
     M = get_model_2bit()
     max_k = 5
-    print("=== 2-bit binary counter Verification ===")
-    print("\nFinite Run Verification:")
+    print("2-bit binary counter Verification")
+    print("\nfinite run verification:")
     for k in range(1, max_k + 1):
         FiniteRun(M, k)
-    print("\nBounded Model Checking:")
+    print("\nbounded model checking:")
     BMC(M, max_k)
-    print("\nInterpolation-Based Verification:")
+    print("\ninterpolation-based verification:")
     Interpolation(M, max_k)
 
 if __name__ == "__main__":
