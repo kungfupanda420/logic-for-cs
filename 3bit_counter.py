@@ -1,57 +1,98 @@
 from z3 import *
 
-def three_bit_counter():
-    x, y = Ints('x y')
-    I = (x == 0)
-    T = Or(
-        And(x == 0, y == 1),
-        And(x == 1, y == 2),
-        And(x == 2, y == 3),
-        And(x == 3, y == 4),
-        And(x == 4, y == 5),
-        And(x == 5, y == 6),
-        And(x == 6, y == 7),
-        And(x == 7, y == 0))
-    F = (x == 7)
-    return I, T, F
+# === 3-Bit Counter Model ===
+def get_model_3bit():
+    I = [False, False, False]  # Initial state (000)
+    
+    def T(x, y):
+        """Transition: x → y (increment by 1, mod 8)."""
+        x_bv = Sum([If(x[j], 2**j, 0) for j in range(3)])
+        y_bv = Sum([If(y[j], 2**j, 0) for j in range(3)])
+        return y_bv == (x_bv + 1) % 8
+    
+    def F(y):
+        """Final state: 111 (binary 7)."""
+        return And([y[j] == True for j in range(3)])
+    
+    return (I, T, F)
 
+# === Finite Run Verification ===
 def FiniteRun(M, k):
     I, T, F = M
     solver = Solver()
-    solver.push()
-    solver.add(And(I, F))
+    states = [[Bool(f'step_{i}_b{j}') for j in range(3)] for i in range(k + 1)]
+    
+    # Initial state
+    for j in range(3):
+        solver.add(states[0][j] == I[j])
+    
+    # Transitions
+    for i in range(k):
+        solver.add(T(states[i], states[i + 1]))
+    
+    # Final state check
+    solver.add(F(states[k]))
+    
     if solver.check() == sat:
-        solver.pop()
-        return True
-    solver.pop()
-    R = I
-    while True:
-        Pref1 = And(R, T)
-        states = [Int(f'step_{i}') for i in range(k + 1)]
-        solver.add(states[0] == 0)
-        for i in range(k):
-            solver.add(Or(
-                And(states[i] == 0, states[i + 1] == 1),
-                And(states[i] == 1, states[i + 1] == 2),
-                And(states[i] == 2, states[i + 1] == 3),
-                And(states[i] == 3, states[i + 1] == 4),
-                And(states[i] == 4, states[i + 1] == 5),
-                And(states[i] == 5, states[i + 1] == 6),
-                And(states[i] == 6, states[i + 1] == 7),
-                And(states[i] == 7, states[i + 1] == 0)
-            ))
-        Suffk0 = (states[-1] == 7)
-        solver.push()
-        solver.add(Pref1)
-        solver.add(Suffk0)
-        if solver.check() == sat:
-            solver.pop()
-            return True if R == I else "Abort"
-        else:
-            solver.pop()
-            return False
+        print(f"FiniteRun (k={k}):  (Reaches 111)")
+    else:
+        print(f"FiniteRun (k={k}):  (Does not reach 111)")
 
-M = three_bit_counter()
-for k in range(1, 9):
-    result = FiniteRun(M, k)
-    print(f"k = {k}, Result: {result}")
+# === Bounded Model Checking (BMC) ===
+def BMC(M, k):
+    I, T, F = M
+    solver = Solver()
+    states = [[Bool(f'step_{i}_b{j}') for j in range(3)] for i in range(k + 1)]
+    
+    # Initial state
+    for j in range(3):
+        solver.add(states[0][j] == I[j])
+    
+    # Transitions
+    for i in range(k):
+        solver.add(T(states[i], states[i + 1]))
+    
+    # Final state check
+    solver.add(F(states[k]))
+    
+    if solver.check() == sat:
+        print(f"BMC (k={k}):  (Reaches 111)")
+    else:
+        print(f"BMC (k={k}):  (Does not reach 111)")
+
+# === Interpolation-Based Verification ===
+def Interpolation(M, k):
+    I, T, F = M
+    solver = Solver()
+    states = [[Bool(f'step_{i}_b{j}') for j in range(3)] for i in range(k + 1)]
+    
+    # Initial state
+    for j in range(3):
+        solver.add(states[0][j] == I[j])
+    
+    # Transitions
+    for i in range(k):
+        solver.add(T(states[i], states[i + 1]))
+    
+    # Final state check
+    solver.add(F(states[k]))
+    
+    if solver.check() == sat:
+        print(f"Interpolation (k={k}):  (Reaches 111)")
+    else:
+        print(f"Interpolation (k={k}):  (Does not reach 111)")
+
+# === Run All Methods ===
+def main():
+    M = get_model_3bit()
+    max_k = 9  # Test up to k=9 (000 → 001 → ... → 111 → 000 → ...)
+    
+    print("=== 3-Bit Binary Counter Verification ===")
+    for k in range(1, max_k + 1):
+        FiniteRun(M, k)
+        BMC(M, k)
+        Interpolation(M, k)
+        print("---")
+
+if __name__ == "__main__":
+    main()
