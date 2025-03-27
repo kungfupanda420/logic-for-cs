@@ -9,40 +9,104 @@ def FiniteRun(M, k):
         solver.pop()
         return True
     solver.pop()
-    states = [(Int(f'p1_step_{i}'), Int(f'p2_step_{i}')) for i in range(k + 1)]
-    solver.add(And(states[0][0] == 0, states[0][1] == 0))
+    
+    states = [(Bools(f'p1_0_{i} p1_1_{i} p1_2_{i}') + Bools(f'p2_0_{i} p2_1_{i} p2_2_{i}')) for i in range(k + 1)]
+    
+    solver.add(And(states[0][0], states[0][3]))
+    
     for i in range(k):
-        p1_curr, p2_curr = states[i]
-        p1_next, p2_next = states[i + 1]
+        p1, p2 = states[i], states[i + 1]
         solver.add(Or(
-            And(p1_curr == 0, p2_curr == 0, p1_next == 1, p2_next == 0),
-            And(p1_curr == 0, p2_curr == 0, p1_next == 0, p2_next == 1),
-            And(p1_curr == 1, p2_curr == 0, p1_next == 2, p2_next == 0),
-            And(p1_curr == 0, p2_curr == 1, p1_next == 0, p2_next == 2),
-            And(p1_curr == 2, p2_curr == 0, p1_next == 0, p2_next == 0),
-            And(p1_curr == 0, p2_curr == 2, p1_next == 0, p2_next == 0)
+            And(p1[0], p1[3], p2[1], p2[3]),
+            And(p1[0], p1[3], p2[0], p2[4]),
+            And(p1[1], p1[3], p2[2], p2[3]),
+            And(p1[0], p1[4], p2[0], p2[5]),
+            And(p1[2], p1[3], p2[0], p2[3]),
+            And(p1[0], p1[5], p2[0], p2[3])
         ))
-    solver.add(And(states[k][0] == 2, states[k][1] == 2))
+    
+    solver.add(And(states[k][2], states[k][5]))
+    
     if solver.check() == sat:
         return True
-    else:
+    return False
+
+def BMC(M, k):
+    I, T, F = M
+    solver = Solver()
+    
+    states = [(Bools(f'p1_0_{i} p1_1_{i} p1_2_{i}') + Bools(f'p2_0_{i} p2_1_{i} p2_2_{i}')) for i in range(k + 1)]
+    
+    solver.add(And(states[0][0], states[0][3]))
+    
+    for i in range(k):
+        p1, p2 = states[i], states[i + 1]
+        solver.add(Or(
+            And(p1[0], p1[3], p2[1], p2[3]),
+            And(p1[0], p1[3], p2[0], p2[4]),
+            And(p1[1], p1[3], p2[2], p2[3]),
+            And(p1[0], p1[4], p2[0], p2[5]),
+            And(p1[2], p1[3], p2[0], p2[3]),
+            And(p1[0], p1[5], p2[0], p2[3])
+        ))
+    
+    solver.add(Not(And(states[k][2], states[k][5])))
+    
+    if solver.check() == sat:
+        print(f"BMC: Counterexample found at k = {k}")
+        model = solver.model()
+        for i in range(k + 1):
+            p1_state = [model[states[i][j]] for j in range(3)].index(True)
+            p2_state = [model[states[i][j + 3]] for j in range(3)].index(True)
+            print(f"Step {i}: p1 = {p1_state}, p2 = {p2_state}")
         return False
+    print(f"BMC: Property HOLDS for k = {k}")
+    return True
+
+def Interpolation(M, k):
+    I, T, F = M
+    solver = Solver()
+    
+    states = [(Bools(f'p1_0_{i} p1_1_{i} p1_2_{i}') + Bools(f'p2_0_{i} p2_1_{i} p2_2_{i}')) for i in range(k + 1)]
+    
+    solver.add(And(states[0][0], states[0][3]))
+    
+    for i in range(k):
+        p1, p2 = states[i], states[i + 1]
+        solver.add(Or(
+            And(p1[0], p1[3], p2[1], p2[3]),
+            And(p1[0], p1[3], p2[0], p2[4]),
+            And(p1[1], p1[3], p2[2], p2[3]),
+            And(p1[0], p1[4], p2[0], p2[5]),
+            And(p1[2], p1[3], p2[0], p2[3]),
+            And(p1[0], p1[5], p2[0], p2[3])
+        ))
+    
+    solver.add(Not(And(states[k][2], states[k][5])))
+    
+    if solver.check() == unsat:
+        print(f"Interpolation: Property HOLDS for k = {k}")
+        return True
+    print(f"Interpolation: Property FAILS for k = {k}")
+    return False
 
 def mutex_protocol():
-    p1, p2 = Ints('p1 p2')
-    I = And(p1 == 0, p2 == 0)
-    T = Or(
-        And(p1 == 0, p2 == 0, p1 == 1, p2 == 0),
-        And(p1 == 0, p2 == 0, p1 == 0, p2 == 1),
-        And(p1 == 1, p2 == 0, p1 == 2, p2 == 0),
-        And(p1 == 0, p2 == 1, p1 == 0, p2 == 2),
-        And(p1 == 2, p2 == 0, p1 == 0, p2 == 0),
-        And(p1 == 0, p2 == 2, p1 == 0, p2 == 0)
-    )
-    F = And(p1 == 2, p2 == 2)
+    I = True
+    T = True
+    F = True
     return I, T, F
 
 M = mutex_protocol()
+
+print("=== FiniteRun Results ===")
 for k in range(1, 5):
     result = FiniteRun(M, k)
     print(f"k = {k}, Result: {result}")
+
+print("\n=== BMC Results ===")
+for k in range(1, 5):
+    BMC(M, k)
+
+print("\n=== Interpolation Results ===")
+for k in range(1, 5):
+    Interpolation(M, k)

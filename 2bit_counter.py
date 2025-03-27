@@ -1,98 +1,90 @@
 from z3 import *
 
-# === 2-Bit Counter Model ===
 def get_model_2bit():
-    I = [False, False]  # Initial state (00)
-    
+    I = [False, False]
     def T(x, y):
-        """Transition: x → y (increment by 1, mod 4)."""
         x_bv = Sum([If(x[j], 2**j, 0) for j in range(2)])
         y_bv = Sum([If(y[j], 2**j, 0) for j in range(2)])
         return y_bv == (x_bv + 1) % 4
-    
     def F(y):
-        """Final state: 11 (binary 3)."""
         return And([y[j] == True for j in range(2)])
-    
     return (I, T, F)
 
-# === Finite Run Verification ===
 def FiniteRun(M, k):
     I, T, F = M
     solver = Solver()
     states = [[Bool(f'step_{i}_b{j}') for j in range(2)] for i in range(k + 1)]
-    
-    # Initial state
     for j in range(2):
         solver.add(states[0][j] == I[j])
-    
-    # Transitions
     for i in range(k):
         solver.add(T(states[i], states[i + 1]))
-    
-    # Final state check
     solver.add(F(states[k]))
-    
     if solver.check() == sat:
-        print(f"FiniteRun (k={k}):  (Reaches 11)")
+        print(f"FiniteRun (k={k}): Reaches 11")
     else:
-        print(f"FiniteRun (k={k}):  (Does not reach 11)")
+        print(f"FiniteRun (k={k}): Does not reach 11")
 
-# === Bounded Model Checking (BMC) ===
-def BMC(M, k):
+def BMC(M, max_k):
     I, T, F = M
-    solver = Solver()
-    states = [[Bool(f'step_{i}_b{j}') for j in range(2)] for i in range(k + 1)]
-    
-    # Initial state
-    for j in range(2):
-        solver.add(states[0][j] == I[j])
-    
-    # Transitions
-    for i in range(k):
-        solver.add(T(states[i], states[i + 1]))
-    
-    # Final state check
-    solver.add(F(states[k]))
-    
-    if solver.check() == sat:
-        print(f"BMC (k={k}):  (Reaches 11)")
-    else:
-        print(f"BMC (k={k}):  (Does not reach 11)")
+    for k in range(1, max_k + 1):
+        solver = Solver()
+        states = [[Bool(f'step_{i}_b{j}') for j in range(2)] for i in range(k + 1)]
+        for j in range(2):
+            solver.add(states[0][j] == I[j])
+        for i in range(k):
+            solver.add(T(states[i], states[i + 1]))
+        violation_found = False
+        for i in range(1, k + 1):
+            solver.push()
+            solver.add(F(states[i]))
+            if solver.check() == sat:
+                print(f"BMC found violation at step {i} (within k={k})")
+                violation_found = True
+                solver.pop()
+                break
+            solver.pop()
+        if violation_found:
+            return
+    print(f"BMC completed (k={max_k}): No violation found")
 
-# === Interpolation-Based Verification ===
-def Interpolation(M, k):
+def Interpolation(M, max_k):
     I, T, F = M
-    solver = Solver()
-    states = [[Bool(f'step_{i}_b{j}') for j in range(2)] for i in range(k + 1)]
-    
-    # Initial state
-    for j in range(2):
-        solver.add(states[0][j] == I[j])
-    
-    # Transitions
-    for i in range(k):
-        solver.add(T(states[i], states[i + 1]))
-    
-    # Final state check
-    solver.add(F(states[k]))
-    
-    if solver.check() == sat:
-        print(f"Interpolation (k={k}):  (Reaches 11)")
-    else:
-        print(f"Interpolation (k={k}):  (Does not reach 11)")
+    s = Solver()
+    current_approx = I
+    reached_fixed_point = False
+    for k in range(1, max_k + 1):
+        states = [[Bool(f'step_{i}_b{j}') for j in range(2)] for i in range(k + 1)]
+        s.reset()
+        for j in range(2):
+            s.add(states[0][j] == current_approx[j])
+        for i in range(k):
+            s.add(T(states[i], states[i + 1]))
+        s.push()
+        s.add(F(states[k]))
+        if s.check() == sat:
+            print(f"Interpolation (k={k-1}): Reaches 11")
+            return
+        s.pop()
+        new_approx = [Or(current_approx[j], states[k][j]) for j in range(2)]
+        if current_approx == new_approx:
+            reached_fixed_point = True
+            print("Interpolation: Reached fixed point - system is safe")
+            break
+        current_approx = new_approx
+    if not reached_fixed_point:
+        print(f"Interpolation: No conclusion within {max_k} steps")
 
-# === Run All Methods ===
 def main():
     M = get_model_2bit()
-    max_k = 5  # Test up to k=5 (00 → 01 → 10 → 11 → 00 → ...)
-    
-    print("=== 2-Bit Binary Counter Verification ===")
+    max_k = 5
+    print("=== 2-bit binary counter Verification ===")
+    print("\nFinite Run Verification:")
     for k in range(1, max_k + 1):
         FiniteRun(M, k)
-        BMC(M, k)
-        Interpolation(M, k)
-        print("---")
+    print("\nBounded Model Checking:")
+    BMC(M, max_k)
+    print("\nInterpolation-Based Verification:")
+    Interpolation(M, max_k)
 
 if __name__ == "__main__":
     main()
